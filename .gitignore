@@ -1,0 +1,11 @@
+msp430_adc_soft_uart.txt
+*.elf
+*.hex
+*.map
+*.d
+*.o
+*.swp
+*~
+.#*
+#*
+.DS_Store
