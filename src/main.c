@@ -33,6 +33,7 @@
 
 #include <msp430.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include "soft_uart.h"
 
 //------------------------------------------------------------------------------
@@ -40,38 +41,60 @@
 //------------------------------------------------------------------------------
 int main(void)
 {
-    WDTCTL = WDTPW + WDTHOLD;           // Stop watchdog timer
-    if (CALBC1_1MHZ==0xFF) {			// If calibration constants erased
-      while(1);                         // do not load, trap CPU!!
+  WDTCTL = WDTPW + WDTHOLD;           // Stop watchdog timer
+  if (CALBC1_1MHZ==0xFF) {			// If calibration constants erased
+    while(1);                         // do not load, trap CPU!!
+  }
+
+  // Frequency
+  DCOCTL  = 0;                        // Select lowest DCOx and MODx settings
+  BCSCTL1 = CALBC1_1MHZ;              // 1mhz is required for the UART
+  DCOCTL  = CALDCO_1MHZ;
+
+  P1OUT = 0x00;                       // Initialize all GPIO
+
+  // UART
+  P1SEL = UART_TXD + UART_RXD;        // Timer function for TXD/RXD pins
+  P1DIR = 0xFF & ~UART_RXD;           // Set all pins but RXD to output
+
+  // ADC
+  ADC10CTL0  = ADC10SHT_2 + ADC10ON + ADC10IE; // ADC10ON, interrupt enabled
+  ADC10CTL1  = INCH_3;                // input A3
+  ADC10AE0  |= 0x08;                  // PA.3 ADC option select
+
+  // Disable P2
+  P2OUT = 0x00;
+  P2SEL = 0x00;
+  P2DIR = 0xFF;
+
+  __enable_interrupt();
+  soft_uart_init(NULL);               // Start Timer_A UART
+
+  for (;;) {
+    // Update board outputs according to received byte
+    unsigned char rxBuffer = soft_uart_get();
+    char value_string[5] = { 0 };
+
+    switch (rxBuffer) {
+      case '1':
+        ADC10CTL0 |= ENC + ADC10SC;             // Sampling and conversion start
+        __bis_SR_register(CPUOFF + GIE);        // LPM0, ADC10_ISR will force exit
+
+        itoa(ADC10MEM, value_string, 10);
+
+        soft_uart_print("A3: ");
+        soft_uart_print(value_string);
+        soft_uart_print("\r\n");
+        break;
+      default:
+        break;
     }
-    DCOCTL  = 0;                        // Select lowest DCOx and MODx settings
-    BCSCTL1 = CALBC1_1MHZ;
-    DCOCTL  = CALDCO_1MHZ;
+  }
+}
 
-    P1OUT = 0x00;                       // Initialize all GPIO
-    P1SEL = UART_TXD + UART_RXD;        // Timer function for TXD/RXD pins
-    P1DIR = 0xFF & ~UART_RXD;           // Set all pins but RXD to output
-    P2OUT = 0x00;
-    P2SEL = 0x00;
-    P2DIR = 0xFF;
-
-    __enable_interrupt();
-    soft_uart_init(NULL);               // Start Timer_A UART
-
-    for (;;) {
-        // Update board outputs according to received byte
-        unsigned char rxBuffer = soft_uart_get();
-        switch (rxBuffer) {
-          case '1':
-            soft_uart_print("received 1\r\n");
-            break;
-          case '2':
-            soft_uart_print("received 2\r\n");
-            break;
-          default:
-            break;
-        }
-        // Echo received character
-        soft_uart_tx(rxBuffer);
-    }
+// ADC10 interrupt service routine
+#pragma vector = ADC10_VECTOR
+__interrupt void
+ADC10_ISR() {
+  __bic_SR_register_on_exit(CPUOFF);    // Clear CPUOFF bit from 0(SR)
 }
