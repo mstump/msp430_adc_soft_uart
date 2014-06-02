@@ -36,36 +36,60 @@
 #include <stdlib.h>
 #include "soft_uart.h"
 
-//------------------------------------------------------------------------------
-// main()
-//------------------------------------------------------------------------------
+/**
+ * Convert an ADC output (steps) into millivolts. The MSP430G2231
+ * sports a 10 bit ADC which means range is 2^10 or 1024.
+ *
+ * @param the steps as outputed by the ADC
+ * @param reference voltage in millivolts
+ * @param the number of steps supported by the ADC
+ *
+ * @return millivolts
+ */
+inline int
+adc_step_to_volt(
+    int steps,
+    int vref,
+    int range) {
+  return (vref / range) * steps;
+}
+
+uint16_t
+ADC_single_meas(
+    uint16_t chan) {
+  ADC10CTL0 &= ~ENC;
+  ADC10CTL0  = ADC10SHT_3
+             | ADC10ON
+             | SREF_0;
+  ADC10CTL1  = ADC10SSEL_0 + chan;
+  ADC10CTL0 |= ENC + ADC10SC;
+  while (ADC10CTL1 & BUSY);
+  return ADC10MEM;
+}
+
 int main(void)
 {
-  WDTCTL = WDTPW + WDTHOLD;           // Stop watchdog timer
-  if (CALBC1_1MHZ==0xFF) {			// If calibration constants erased
-    while(1);                         // do not load, trap CPU!!
+  WDTCTL = WDTPW + WDTHOLD;             // Stop watchdog timer
+  if (CALBC1_1MHZ==0xFF) {              // If calibration constants erased
+    while(1);                           // do not load, trap CPU!!
   }
 
   // Frequency
-  DCOCTL  = 0;                        // Select lowest DCOx and MODx settings
-  BCSCTL1 = CALBC1_1MHZ;              // 1mhz is required for the UART
+  DCOCTL  = 0;                          // Select lowest DCOx and MODx settings
+  BCSCTL1 = CALBC1_1MHZ;                // 1mhz is required for the UART
   DCOCTL  = CALDCO_1MHZ;
 
-  P1OUT = 0x00;                       // Initialize all GPIO
-
   // UART
-  P1SEL = UART_TXD + UART_RXD;        // Timer function for TXD/RXD pins
-  P1DIR = 0xFF & ~UART_RXD;           // Set all pins but RXD to output
+  P1SEL  = UART_TXD + UART_RXD;         // Timer function for TXD/RXD pins
+  P1DIR |= UART_TXD;
 
   // ADC
-  ADC10CTL0  = ADC10SHT_2 + ADC10ON + ADC10IE; // ADC10ON, interrupt enabled
-  ADC10CTL1  = INCH_3;                // input A3
-  ADC10AE0  |= 0x08;                  // PA.3 ADC option select
-
-  // Disable P2
-  P2OUT = 0x00;
-  P2SEL = 0x00;
-  P2DIR = 0xFF;
+  /* P1SEL     |= BIT3;                    // ADC input pin P1.3 */
+  /* // Vcc & Vss as reference, Sample and hold for 64 Clock cycles, ADC on */
+  /* // Don't use interrupts just poll */
+  /* ADC10CTL0  = SREF_0 + ADC10SHT_3 + ADC10ON; */
+  /* ADC10CTL1  = INCH_3 + ADC10DIV_3 ;    // Channel 3, ADC10CLK/3 */
+  /* ADC10AE0  |= BIT3; */
 
   __enable_interrupt();
   soft_uart_init(NULL);               // Start Timer_A UART
@@ -73,28 +97,24 @@ int main(void)
   for (;;) {
     // Update board outputs according to received byte
     unsigned char rxBuffer = soft_uart_get();
-    char value_string[5] = { 0 };
+    char value_string[5]   = { 0 };
 
     switch (rxBuffer) {
       case '1':
-        ADC10CTL0 |= ENC + ADC10SC;             // Sampling and conversion start
-        __bis_SR_register(CPUOFF + GIE);        // LPM0, ADC10_ISR will force exit
+        /* __delay_cycles(1000); */
+        /* ADC10CTL0 |= ENC + ADC10SC;             // Sampling and conversion start */
+        /* while (ADC10CTL1 & BUSY); */
 
-        itoa(ADC10MEM, value_string, 10);
+        /* // itoa(adc_step_to_volt(ADC10MEM, 3000, 1024), value_string, 10); */
+        /* itoa(ADC10MEM, value_string, 10); */
 
+        itoa(ADC_single_meas(INCH_4), value_string, 10);
         soft_uart_print("A3: ");
         soft_uart_print(value_string);
-        soft_uart_print("\r\n");
+        soft_uart_print("mV\r\n");
         break;
       default:
         break;
     }
   }
-}
-
-// ADC10 interrupt service routine
-#pragma vector = ADC10_VECTOR
-__interrupt void
-ADC10_ISR() {
-  __bic_SR_register_on_exit(CPUOFF);    // Clear CPUOFF bit from 0(SR)
 }

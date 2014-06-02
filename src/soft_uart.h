@@ -31,6 +31,8 @@
  *
  *******************************************************************************/
 
+#ifndef __SOFT_UART_H__
+#define __SOFT_UART_H__
 
 //------------------------------------------------------------------------------
 // Hardware-related definitions
@@ -74,3 +76,5 @@ soft_uart_print(
  */
 unsigned char
 soft_uart_get();
+
+#endif

@@ -17,7 +17,7 @@ SOURCES = $(wildcard src/*.c)
 INCLUDES = -IInclude
 # Add or subtract whatever MSPGCC flags you want. There are plenty more
 #######################################################################################
-CFLAGS   = -mmcu=$(MCU) -g -Os -Wall -Wunused $(INCLUDES) -Wall -std=c1x
+CFLAGS   = -mmcu=$(MCU) -g -Os -Wall -Wunused $(INCLUDES) -std=c99
 ASFLAGS  = -mmcu=$(MCU) -x assembler-with-cpp -Wa,-gstabs
 LDFLAGS  = -mmcu=$(MCU) -Wl,-Map=$(TARGET).map
 ########################################################################################
